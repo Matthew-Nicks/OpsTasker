@@ -53,6 +53,25 @@ def _task_to_dict(t) -> dict:
         "completed": t.completed,
     }
 
+def _render_table(tasks: list) -> str:
+    headers = ["ID", "Status", "Priority", "Title"]
+    rows = []
+    for t in tasks:
+        status = "Done" if t.completed else "Pending"
+        rows.append([str(t.id), status, t.priority, t.title])
+
+    # Calculate column widths
+    widths = [len(h) for h in headers]
+    for r in rows:
+        for i, cell in enumerate(r):
+            widths[i] = max(widths[i], len(cell))
+
+    def fmt_row(r: list[str]) -> str:
+        return "  ".join(cell.ljust(widths[i]) for i, cell in enumerate(r))
+
+    lines = [fmt_row(headers), fmt_row(["-" * w for w in widths])]
+    lines += [fmt_row(r) for r in rows]
+    return "\n".join(lines)
 
 def main() -> int:
     parser = build_parser()
@@ -110,10 +129,8 @@ def main() -> int:
             )
             return 0
 
-        for t in tasks:
-            status = "✓" if t.completed else " "
-            print(f"[{t.id}] [{status}] {t.title} ({t.priority})")
-        return 0
+            print(_render_table(tasks))
+            return 0
 
     if args.cmd == "complete":
         ok = store.complete(args.id)
