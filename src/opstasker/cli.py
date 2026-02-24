@@ -8,7 +8,7 @@ from opstasker.storage import TaskStore
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="opstasker", description="Simple task manager (CLI).")
 
-    # Global flag
+    # Global flag (must come before the subcommand when running)
     p.add_argument("--json", action="store_true", help="Output machine-readable JSON")
 
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -18,13 +18,21 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("title", help="Task title")
     add.add_argument("--priority", choices=["low", "medium", "high"], default="medium")
 
-    # list command with filters
+    # list command (filters + sorting)
     list_cmd = sub.add_parser("list", help="List tasks")
     list_cmd.add_argument("--priority", choices=["low", "medium", "high"], help="Filter by priority")
 
     status = list_cmd.add_mutually_exclusive_group()
     status.add_argument("--completed", action="store_true", help="Show only completed tasks")
     status.add_argument("--pending", action="store_true", help="Show only pending tasks")
+
+    list_cmd.add_argument(
+        "--sort",
+        choices=["id", "title", "priority", "status"],
+        default="id",
+        help="Sort tasks (default: id)",
+    )
+    list_cmd.add_argument("--desc", action="store_true", help="Sort descending")
 
     # complete command
     done = sub.add_parser("complete", help="Complete a task by ID")
@@ -71,7 +79,21 @@ def main() -> int:
 
         if getattr(args, "pending", False):
             tasks = [t for t in tasks if not t.completed]
+        
+        # sorting
+        reverse = getattr(args, "desc", False)
 
+        if getattr(args, "sort", "id") == "id":
+            tasks = sorted(tasks, key=lambda t: t.id, reverse=reverse)
+        elif args.sort == "title":
+            tasks = sorted(tasks, key=lambda t: t.title.lower(), reverse=reverse)
+        elif args.sort == "priority":
+            order = {"low": 0, "medium": 1, "high": 2}
+            tasks = sorted(tasks, key=lambda t: order.get(t.priority, 99), reverse=reverse)
+        elif args.sort == "status":
+        # pending first when ascending, completed first when descending
+            tasks = sorted(tasks, key=lambda t: t.completed, reverse=reverse)
+        
         if args.json:
             print(json.dumps({"ok": True, "tasks": [_task_to_dict(t) for t in tasks]}, indent=2))
             return 0
