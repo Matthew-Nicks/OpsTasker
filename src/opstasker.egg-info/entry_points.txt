@@ -1,0 +1,2 @@
+[console_scripts]
+opstasker = opstasker.cli:main

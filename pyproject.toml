@@ -1,0 +1,12 @@
+[project]
+name = "opstasker"
+version = "0.1.0"
+description = "A simple, professional Python CLI task manager."
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+opstasker = "opstasker.cli:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
