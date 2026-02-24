@@ -4,30 +4,47 @@ import argparse
 import json
 from opstasker.storage import TaskStore
 
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="opstasker", description="Simple task manager (CLI).")
 
-    # IMPORTANT: global flags must be added to the parent parser
+    # Global flag
     p.add_argument("--json", action="store_true", help="Output machine-readable JSON")
 
     sub = p.add_subparsers(dest="cmd", required=True)
 
+    # add command
     add = sub.add_parser("add", help="Add a task")
     add.add_argument("title", help="Task title")
     add.add_argument("--priority", choices=["low", "medium", "high"], default="medium")
 
-    sub.add_parser("list", help="List tasks")
+    # list command with filters
+    list_cmd = sub.add_parser("list", help="List tasks")
+    list_cmd.add_argument("--priority", choices=["low", "medium", "high"], help="Filter by priority")
 
+    status = list_cmd.add_mutually_exclusive_group()
+    status.add_argument("--completed", action="store_true", help="Show only completed tasks")
+    status.add_argument("--pending", action="store_true", help="Show only pending tasks")
+
+    # complete command
     done = sub.add_parser("complete", help="Complete a task by ID")
     done.add_argument("id", type=int)
 
+    # delete command
     delete = sub.add_parser("delete", help="Delete a task by ID")
     delete.add_argument("id", type=int)
 
     return p
 
+
 def _task_to_dict(t) -> dict:
-    return {"id": t.id, "title": t.title, "priority": t.priority, "completed": t.completed}
+    return {
+        "id": t.id,
+        "title": t.title,
+        "priority": t.priority,
+        "completed": t.completed,
+    }
+
 
 def main() -> int:
     parser = build_parser()
@@ -44,12 +61,31 @@ def main() -> int:
 
     if args.cmd == "list":
         tasks = store.list()
+
+        # filtering
+        if getattr(args, "priority", None):
+            tasks = [t for t in tasks if t.priority == args.priority]
+
+        if getattr(args, "completed", False):
+            tasks = [t for t in tasks if t.completed]
+
+        if getattr(args, "pending", False):
+            tasks = [t for t in tasks if not t.completed]
+
         if args.json:
             print(json.dumps({"ok": True, "tasks": [_task_to_dict(t) for t in tasks]}, indent=2))
             return 0
 
         if not tasks:
-            print("No tasks yet.")
+            print(
+                "No tasks match your filters."
+                if (
+                    getattr(args, "priority", None)
+                    or getattr(args, "completed", False)
+                    or getattr(args, "pending", False)
+                )
+                else "No tasks yet."
+            )
             return 0
 
         for t in tasks:
@@ -74,6 +110,7 @@ def main() -> int:
         return 0
 
     return 2
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
