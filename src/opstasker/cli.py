@@ -78,59 +78,51 @@ def main() -> int:
     args = parser.parse_args()
     store = TaskStore()
 
-    if args.cmd == "add":
-        task = store.add(title=args.title, priority=args.priority)
-        if args.json:
-            print(json.dumps({"ok": True, "task": _task_to_dict(task)}, indent=2))
-        else:
-            print(f"Added [{task.id}] {task.title} ({task.priority})")
-        return 0
-
     if args.cmd == "list":
         tasks = store.list()
 
-        # filtering
-        if getattr(args, "priority", None):
-            tasks = [t for t in tasks if t.priority == args.priority]
+    # filtering
+    if getattr(args, "priority", None):
+        tasks = [t for t in tasks if t.priority == args.priority]
 
-        if getattr(args, "completed", False):
-            tasks = [t for t in tasks if t.completed]
+    if getattr(args, "completed", False):
+        tasks = [t for t in tasks if t.completed]
 
-        if getattr(args, "pending", False):
-            tasks = [t for t in tasks if not t.completed]
-        
-        # sorting
-        reverse = getattr(args, "desc", False)
+    if getattr(args, "pending", False):
+        tasks = [t for t in tasks if not t.completed]
 
-        if getattr(args, "sort", "id") == "id":
-            tasks = sorted(tasks, key=lambda t: t.id, reverse=reverse)
-        elif args.sort == "title":
-            tasks = sorted(tasks, key=lambda t: t.title.lower(), reverse=reverse)
-        elif args.sort == "priority":
-            order = {"low": 0, "medium": 1, "high": 2}
-            tasks = sorted(tasks, key=lambda t: order.get(t.priority, 99), reverse=reverse)
-        elif args.sort == "status":
-        # pending first when ascending, completed first when descending
-            tasks = sorted(tasks, key=lambda t: t.completed, reverse=reverse)
-        
-        if args.json:
-            print(json.dumps({"ok": True, "tasks": [_task_to_dict(t) for t in tasks]}, indent=2))
-            return 0
+    # sorting
+    reverse = getattr(args, "desc", False)
+    sort_key = getattr(args, "sort", "id")
 
-        if not tasks:
-            print(
-                "No tasks match your filters."
-                if (
-                    getattr(args, "priority", None)
-                    or getattr(args, "completed", False)
-                    or getattr(args, "pending", False)
-                )
-                else "No tasks yet."
-            )
-            return 0
+    if sort_key == "id":
+        tasks = sorted(tasks, key=lambda t: t.id, reverse=reverse)
+    elif sort_key == "title":
+        tasks = sorted(tasks, key=lambda t: t.title.lower(), reverse=reverse)
+    elif sort_key == "priority":
+        order = {"low": 0, "medium": 1, "high": 2}
+        tasks = sorted(tasks, key=lambda t: order.get(t.priority, 99), reverse=reverse)
+    elif sort_key == "status":
+        tasks = sorted(tasks, key=lambda t: t.completed, reverse=reverse)
 
-            print(_render_table(tasks))
-            return 0
+    # JSON output
+    if args.json:
+        print(json.dumps({"ok": True, "tasks": [_task_to_dict(t) for t in tasks]}, indent=2))
+        return 0
+
+    # empty state
+    if not tasks:
+        any_filter = bool(
+            getattr(args, "priority", None)
+            or getattr(args, "completed", False)
+            or getattr(args, "pending", False)
+        )
+        print("No tasks match your filters." if any_filter else "No tasks yet.")
+        return 0
+
+    # table output
+    print(_render_table(tasks))
+    return 0
 
     if args.cmd == "complete":
         ok = store.complete(args.id)
