@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+
 from opstasker.storage import TaskStore
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="opstasker", description="Simple task manager (CLI).")
 
-    # Global flag (must come before the subcommand when running)
+    # Global flag (must come before the subcommand)
     p.add_argument("--json", action="store_true", help="Output machine-readable JSON")
 
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -53,14 +54,15 @@ def _task_to_dict(t) -> dict:
         "completed": t.completed,
     }
 
+
 def _render_table(tasks: list) -> str:
     headers = ["ID", "Status", "Priority", "Title"]
     rows = []
+
     for t in tasks:
         status = "Done" if t.completed else "Pending"
         rows.append([str(t.id), status, t.priority, t.title])
 
-    # Calculate column widths
     widths = [len(h) for h in headers]
     for r in rows:
         for i, cell in enumerate(r):
@@ -73,71 +75,91 @@ def _render_table(tasks: list) -> str:
     lines += [fmt_row(r) for r in rows]
     return "\n".join(lines)
 
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     store = TaskStore()
 
+    # ----------------------------
+    # ADD
+    # ----------------------------
+    if args.cmd == "add":
+        task = store.add(title=args.title, priority=args.priority)
+        if args.json:
+            print(json.dumps({"ok": True, "task": _task_to_dict(task)}, indent=2), flush=True)
+            return 0
+        print(f"Added [{task.id}] {task.title} ({task.priority})")
+        return 0
+
+    # ----------------------------
+    # LIST
+    # ----------------------------
     if args.cmd == "list":
         tasks = store.list()
 
-    # filtering
-    if getattr(args, "priority", None):
-        tasks = [t for t in tasks if t.priority == args.priority]
+        # filtering
+        if getattr(args, "priority", None):
+            tasks = [t for t in tasks if t.priority == args.priority]
 
-    if getattr(args, "completed", False):
-        tasks = [t for t in tasks if t.completed]
+        if getattr(args, "completed", False):
+            tasks = [t for t in tasks if t.completed]
 
-    if getattr(args, "pending", False):
-        tasks = [t for t in tasks if not t.completed]
+        if getattr(args, "pending", False):
+            tasks = [t for t in tasks if not t.completed]
 
-    # sorting
-    reverse = getattr(args, "desc", False)
-    sort_key = getattr(args, "sort", "id")
+        # sorting
+        reverse = getattr(args, "desc", False)
+        sort_key = getattr(args, "sort", "id")
 
-    if sort_key == "id":
-        tasks = sorted(tasks, key=lambda t: t.id, reverse=reverse)
-    elif sort_key == "title":
-        tasks = sorted(tasks, key=lambda t: t.title.lower(), reverse=reverse)
-    elif sort_key == "priority":
-        order = {"low": 0, "medium": 1, "high": 2}
-        tasks = sorted(tasks, key=lambda t: order.get(t.priority, 99), reverse=reverse)
-    elif sort_key == "status":
-        tasks = sorted(tasks, key=lambda t: t.completed, reverse=reverse)
+        if sort_key == "id":
+            tasks = sorted(tasks, key=lambda t: t.id, reverse=reverse)
+        elif sort_key == "title":
+            tasks = sorted(tasks, key=lambda t: t.title.lower(), reverse=reverse)
+        elif sort_key == "priority":
+            order = {"low": 0, "medium": 1, "high": 2}
+            tasks = sorted(tasks, key=lambda t: order.get(t.priority, 99), reverse=reverse)
+        elif sort_key == "status":
+            tasks = sorted(tasks, key=lambda t: t.completed, reverse=reverse)
 
-    # JSON output
-    if args.json:
-        print(json.dumps({"ok": True, "tasks": [_task_to_dict(t) for t in tasks]}, indent=2))
+        # JSON output MUST happen even when tasks is empty
+        if args.json:
+            print(json.dumps({"ok": True, "tasks": [_task_to_dict(t) for t in tasks]}, indent=2), flush=True)
+            return 0
+
+        # human output
+        if not tasks:
+            any_filter = bool(
+                getattr(args, "priority", None)
+                or getattr(args, "completed", False)
+                or getattr(args, "pending", False)
+            )
+            print("No tasks match your filters." if any_filter else "No tasks yet.")
+            return 0
+
+        print(_render_table(tasks))
         return 0
 
-    # empty state
-    if not tasks:
-        any_filter = bool(
-            getattr(args, "priority", None)
-            or getattr(args, "completed", False)
-            or getattr(args, "pending", False)
-        )
-        print("No tasks match your filters." if any_filter else "No tasks yet.")
-        return 0
-
-    # table output
-    print(_render_table(tasks))
-    return 0
-
+    # ----------------------------
+    # COMPLETE
+    # ----------------------------
     if args.cmd == "complete":
         ok = store.complete(args.id)
         if args.json:
-            print(json.dumps({"ok": ok, "action": "complete", "id": args.id}, indent=2))
-        else:
-            print("Marked complete." if ok else "Task not found.")
+            print(json.dumps({"ok": ok, "action": "complete", "id": args.id}, indent=2), flush=True)
+            return 0
+        print("Marked complete." if ok else "Task not found.")
         return 0
 
+    # ----------------------------
+    # DELETE
+    # ----------------------------
     if args.cmd == "delete":
         ok = store.delete(args.id)
         if args.json:
-            print(json.dumps({"ok": ok, "action": "delete", "id": args.id}, indent=2))
-        else:
-            print("Deleted." if ok else "Task not found.")
+            print(json.dumps({"ok": ok, "action": "delete", "id": args.id}, indent=2), flush=True)
+            return 0
+        print("Deleted." if ok else "Task not found.")
         return 0
 
     return 2
